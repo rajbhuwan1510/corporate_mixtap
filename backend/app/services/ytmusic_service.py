@@ -29,7 +29,7 @@ class YTMusicService:
             'nocheckcertificate': True,
             'extractor_args': {
                 'youtube': {
-                    'player_client': ['web', 'android'],
+                    'player_client': ['ios', 'tv'],
                 }
             },
             'http_headers': {
