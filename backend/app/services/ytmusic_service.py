@@ -20,8 +20,38 @@ class YTMusicService:
 
     def get_stream_url(self, video_id: str) -> str:
         """
-        Get the streaming URL for a given video ID using yt-dlp to handle ciphers.
+        Get the streaming URL for a given video ID using Piped API (to bypass Render IP blocks),
+        falling back to local yt-dlp extraction if Piped is unavailable.
         """
+        # Try Piped API first (highly reliable on cloud hosting)
+        piped_apis = [
+            "https://pipedapi.kavin.rocks",
+            "https://api.piped.yt",
+            "https://pipedapi.us.to"
+        ]
+        
+        import urllib.request
+        import json
+        
+        for api_base in piped_apis:
+            try:
+                url = f"{api_base}/streams/{video_id}"
+                req = urllib.request.Request(
+                    url, 
+                    headers={'User-Agent': 'Mozilla/5.0'}
+                )
+                with urllib.request.urlopen(req, timeout=5) as response:
+                    data = json.loads(response.read().decode())
+                    # Look for audio streams
+                    audio_streams = data.get("audioStreams", [])
+                    if audio_streams:
+                        # Return the highest quality audio stream url
+                        return audio_streams[0].get("url")
+            except Exception as e:
+                print(f"Failed to fetch stream from Piped API ({api_base}): {e}")
+                continue
+
+        # Fallback to local yt-dlp
         ydl_opts = {
             'format': 'bestaudio/best',
             'quiet': True,
@@ -47,7 +77,7 @@ class YTMusicService:
                 return info.get('url')
         except Exception as e:
             import traceback
-            print(f"Error getting stream URL: {e}")
+            print(f"Fallback yt-dlp error: {e}")
             traceback.print_exc()
             return None
 
