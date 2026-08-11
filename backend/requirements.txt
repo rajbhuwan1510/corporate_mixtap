@@ -2,3 +2,4 @@ fastapi==0.111.0
 uvicorn==0.30.1
 ytmusicapi==1.7.5
 pydantic==2.8.0
+yt-dlp
