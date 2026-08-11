@@ -26,13 +26,20 @@ class YTMusicService:
             'format': 'bestaudio/best',
             'quiet': True,
             'no_warnings': True,
+            'nocheckcertificate': True,
+            'http_headers': {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.5',
+                'Sec-Fetch-Mode': 'navigate',
+            }
         }
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(f"https://www.youtube.com/watch?v={video_id}", download=False)
                 return info.get('url')
         except Exception as e:
-            print(f"Error getting stream URL: {e}")
+            print(f"Error getting stream URL for {video_id}: {e}")
             return None
 
 ytmusic_service = YTMusicService()
