@@ -134,7 +134,21 @@ export function Player({
       setStreamUrl(null);
       return;
     }
-    setStreamUrl(`${API_URL}/api/stream/play/${currentSong.videoId}`);
+    
+    // Fetch direct stream URL asynchronously
+    let active = true;
+    fetch(`${API_URL}/api/stream/${currentSong.videoId}`)
+      .then(res => res.json())
+      .then(data => {
+        if (active && data.url) {
+          setStreamUrl(data.url);
+        }
+      })
+      .catch(e => console.error('Failed to resolve stream URL:', e));
+
+    return () => {
+      active = false;
+    };
   }, [currentSong]);
 
   // Play/Pause effect
