@@ -48,7 +48,7 @@ export function Player({
   const driftCheckIntervalRef = useRef<any>(null);
   const progressIntervalRef = useRef<any>(null);
   const lastStateVersionRef = useRef<number>(-1);
-  const handleEndedRef = useRef<() => void>();
+  const handleEndedRef = useRef<(() => void) | undefined>(undefined);
 
   // ─── Load video into YT.Player ───────────────────────────────────────────
   const loadVideo = useCallback((song: Song, autoplay = true) => {
