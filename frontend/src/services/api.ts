@@ -6,12 +6,6 @@ export const api = {
     if (!res.ok) throw new Error('Search failed');
     return res.json();
   },
-  
-  getStreamUrl: async (videoId: string) => {
-    const res = await fetch(`${API_URL}/api/stream/${videoId}`);
-    if (!res.ok) throw new Error('Stream URL not found');
-    return res.json();
-  },
 
   createRoom: async (creatorId: string, creatorName: string, currentSong: any, position: number, isPlaying: boolean) => {
     const res = await fetch(`${API_URL}/api/rooms/create`, {
