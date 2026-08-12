@@ -1,6 +1,5 @@
 from ytmusicapi import YTMusic
 from typing import Dict, Any, List
-import yt_dlp
 
 class YTMusicService:
     def __init__(self):
