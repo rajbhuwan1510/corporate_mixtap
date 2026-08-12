@@ -20,28 +20,6 @@ interface PlayerProps {
   onRoomStateChange?: (room: Room) => void;
 }
 
-// Load the YouTube IFrame API script once globally
-let ytApiLoaded = false;
-let ytApiResolvers: Array<() => void> = [];
-
-function loadYouTubeAPI(): Promise<void> {
-  return new Promise((resolve) => {
-    if (ytApiLoaded) { resolve(); return; }
-    ytApiResolvers.push(resolve);
-    if (!document.getElementById('yt-iframe-api')) {
-      const tag = document.createElement('script');
-      tag.id = 'yt-iframe-api';
-      tag.src = 'https://www.youtube.com/iframe_api';
-      document.body.appendChild(tag);
-    }
-    window.onYouTubeIframeAPIReady = () => {
-      ytApiLoaded = true;
-      ytApiResolvers.forEach(r => r());
-      ytApiResolvers = [];
-    };
-  });
-}
-
 export function Player({
   currentSong: propSong,
   roomId = null,
@@ -52,85 +30,119 @@ export function Player({
 }: PlayerProps) {
   const playerRef = useRef<any>(null);
   const playerReadyRef = useRef(false);
-  // If a song arrives before the player is ready, queue it here
   const pendingSongRef = useRef<Song | null>(null);
+  const pendingPlayRef = useRef(false);
 
-  // Player state
   const [currentSong, setCurrentSong] = useState<Song | null>(propSong);
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(100);
   const [isMuted, setIsMuted] = useState(false);
-
-  // Room presence UI state
   const [roomData, setRoomData] = useState<Room | null>(null);
   const [socket, setSocket] = useState<RoomSocket | null>(null);
   const [copied, setCopied] = useState(false);
   const [showUsers, setShowUsers] = useState(false);
 
-  // Sync offsets
   const serverOffsetRef = useRef<number>(0);
   const driftCheckIntervalRef = useRef<any>(null);
   const progressIntervalRef = useRef<any>(null);
   const lastStateVersionRef = useRef<number>(-1);
+  const handleEndedRef = useRef<() => void>();
 
-  const loadVideo = useCallback((song: Song) => {
+  // ─── Load video into YT.Player ───────────────────────────────────────────
+  const loadVideo = useCallback((song: Song, autoplay = true) => {
+    console.log('[Player] loadVideo called:', song.videoId, 'ready:', playerReadyRef.current);
     if (!playerReadyRef.current || !playerRef.current) {
-      // Player not ready yet — queue for when it becomes ready
+      console.log('[Player] Player not ready — queuing song');
       pendingSongRef.current = song;
+      pendingPlayRef.current = autoplay;
       return;
     }
     try {
-      playerRef.current.loadVideoById({ videoId: song.videoId, startSeconds: 0 });
       setProgress(0);
+      setDuration(0);
+      setIsPlaying(false);
+      if (autoplay) {
+        playerRef.current.loadVideoById(song.videoId);
+      } else {
+        playerRef.current.cueVideoById(song.videoId);
+      }
+      console.log('[Player] loadVideoById called for:', song.videoId);
     } catch (e) {
-      console.error('Failed to load video:', e);
+      console.error('[Player] loadVideoById error:', e);
     }
   }, []);
 
-  // Initialize YouTube IFrame Player on mount — the container div always exists
+  // ─── Initialize YouTube IFrame Player (once, on mount) ───────────────────
   useEffect(() => {
-    const containerId = 'yt-player-container';
-    loadYouTubeAPI().then(() => {
+    const initPlayer = () => {
       if (playerRef.current) return;
-      playerRef.current = new window.YT.Player(containerId, {
+      console.log('[Player] Creating YT.Player instance');
+      playerRef.current = new window.YT.Player('yt-player-container', {
         height: '1',
         width: '1',
         playerVars: {
-          autoplay: 1,
+          autoplay: 0,
           controls: 0,
           disablekb: 1,
           fs: 0,
           modestbranding: 1,
           rel: 0,
+          playsinline: 1,
           origin: window.location.origin,
         },
         events: {
-          onReady: () => {
+          onReady: (e: any) => {
+            console.log('[Player] YT.Player ready');
             playerReadyRef.current = true;
-            playerRef.current.setVolume(volume);
-            // Play any song that was queued while the API was loading
+            e.target.setVolume(100);
+            // Flush any queued song
             if (pendingSongRef.current) {
-              loadVideo(pendingSongRef.current);
+              const song = pendingSongRef.current;
+              const play = pendingPlayRef.current;
               pendingSongRef.current = null;
+              pendingPlayRef.current = false;
+              loadVideo(song, play);
             }
           },
           onStateChange: (event: any) => {
             const YT = window.YT;
+            console.log('[Player] State change:', event.data);
             if (event.data === YT.PlayerState.ENDED) {
               handleEndedRef.current?.();
             } else if (event.data === YT.PlayerState.PLAYING) {
               setIsPlaying(true);
               const d = playerRef.current?.getDuration?.();
-              if (d) setDuration(d);
+              if (d && !isNaN(d)) setDuration(d);
             } else if (event.data === YT.PlayerState.PAUSED) {
               setIsPlaying(false);
             }
           },
+          onError: (event: any) => {
+            console.error('[Player] YT.Player error code:', event.data);
+          }
         },
       });
-    });
+    };
+
+    // If YT API is already loaded (e.g. hot reload), initialize immediately
+    if (window.YT && window.YT.Player) {
+      initPlayer();
+    } else {
+      // Otherwise inject the script and wait for the callback
+      window.onYouTubeIframeAPIReady = () => {
+        console.log('[Player] onYouTubeIframeAPIReady fired');
+        initPlayer();
+      };
+      if (!document.getElementById('yt-iframe-api')) {
+        const tag = document.createElement('script');
+        tag.id = 'yt-iframe-api';
+        tag.src = 'https://www.youtube.com/iframe_api';
+        document.body.appendChild(tag);
+        console.log('[Player] YouTube IFrame API script injected');
+      }
+    }
 
     // Progress ticker
     progressIntervalRef.current = setInterval(() => {
@@ -145,33 +157,29 @@ export function Player({
     }, 500);
 
     return () => clearInterval(progressIntervalRef.current);
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Keep a ref to handleEnded so the stable onStateChange closure can call the latest version
-  const handleEndedRef = useRef<() => void>();
-
-  // Reset song when prop changes (global/non-room mode)
+  // ─── Sync propSong → currentSong (non-room mode) ─────────────────────────
   useEffect(() => {
     if (!roomId) setCurrentSong(propSong);
   }, [propSong, roomId]);
 
-  // Load video whenever currentSong changes
+  // ─── Load video when currentSong changes ─────────────────────────────────
   useEffect(() => {
     if (!currentSong) return;
-    loadVideo(currentSong);
+    console.log('[Player] currentSong changed:', currentSong.videoId);
+    loadVideo(currentSong, true);
   }, [currentSong, loadVideo]);
 
-  // Connect to room socket
+  // ─── Room socket ──────────────────────────────────────────────────────────
   useEffect(() => {
     if (!roomId || !isJoined || !userId || !userName) {
       if (socket) { socket.close(); setSocket(null); }
       setRoomData(null);
       return;
     }
-
     const roomSocket = new RoomSocket(roomId, userId, userName);
     setSocket(roomSocket);
-
     const unsubscribe = roomSocket.subscribe((msg: SocketMessage) => {
       if (
         msg.type === 'ROOM_STATE' ||
@@ -181,19 +189,14 @@ export function Player({
       ) {
         const room: Room = msg.room || msg.roomState;
         if (!room) return;
-
         setRoomData(room);
         onRoomStateChange?.(room);
-
         if (msg.serverTime) serverOffsetRef.current = msg.serverTime - Date.now();
-
         if (room.currentSong) setCurrentSong(room.currentSong);
         else setCurrentSong(null);
-
         setIsPlaying(room.playback.isPlaying);
         if (room.playback.isPlaying) playerRef.current?.playVideo?.();
         else playerRef.current?.pauseVideo?.();
-
         if (room.version > lastStateVersionRef.current) {
           lastStateVersionRef.current = room.version;
           let targetPos = room.playback.position;
@@ -210,26 +213,24 @@ export function Player({
         }
       }
     });
-
     return () => { unsubscribe(); roomSocket.close(); setSocket(null); setRoomData(null); };
   }, [roomId, isJoined, userId, userName]);
 
-  // Sync propSong changes inside room to server
+  // ─── Sync propSong to room ────────────────────────────────────────────────
   useEffect(() => {
     if (roomId && isJoined && socket && propSong && (!currentSong || propSong.videoId !== currentSong.videoId)) {
       socket.send({ type: 'ROOM_TRACK_CHANGED', song: propSong });
     }
   }, [propSong, roomId, isJoined, socket]);
 
-  // Play/Pause effect (non-room mode)
+  // ─── Play/Pause (non-room) ────────────────────────────────────────────────
   useEffect(() => {
-    if (roomId) return;
-    if (!playerReadyRef.current) return;
+    if (roomId || !playerReadyRef.current) return;
     if (isPlaying) playerRef.current?.playVideo?.();
     else playerRef.current?.pauseVideo?.();
   }, [isPlaying, roomId]);
 
-  // Drift Correction (room mode)
+  // ─── Drift Correction (room) ──────────────────────────────────────────────
   useEffect(() => {
     if (!roomId || !isJoined || !isPlaying) {
       if (driftCheckIntervalRef.current) { clearInterval(driftCheckIntervalRef.current); driftCheckIntervalRef.current = null; }
@@ -247,30 +248,31 @@ export function Player({
     return () => { if (driftCheckIntervalRef.current) clearInterval(driftCheckIntervalRef.current); };
   }, [roomId, isJoined, isPlaying, roomData]);
 
+  // ─── Handlers ────────────────────────────────────────────────────────────
   const handleEnded = useCallback(() => {
     if (roomId && isJoined && socket) socket.send({ type: 'ROOM_NEXT' });
     else setIsPlaying(false);
   }, [roomId, isJoined, socket]);
-
-  // Keep ref up to date
   handleEndedRef.current = handleEnded;
 
   const handlePlayPause = () => {
     if (roomId && isJoined && socket) {
       socket.send({ type: isPlaying ? 'ROOM_PAUSE' : 'ROOM_PLAY' });
     } else {
-      setIsPlaying(p => !p);
+      if (!isPlaying) {
+        playerRef.current?.playVideo?.();
+        setIsPlaying(true);
+      } else {
+        playerRef.current?.pauseVideo?.();
+        setIsPlaying(false);
+      }
     }
   };
 
   const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
     const time = Number(e.target.value);
-    if (roomId && isJoined && socket) {
-      socket.send({ type: 'ROOM_SEEK', position: time });
-    } else {
-      playerRef.current?.seekTo?.(time, true);
-      setProgress(time);
-    }
+    if (roomId && isJoined && socket) socket.send({ type: 'ROOM_SEEK', position: time });
+    else { playerRef.current?.seekTo?.(time, true); setProgress(time); }
   };
 
   const handleNext = () => { if (roomId && isJoined && socket) socket.send({ type: 'ROOM_NEXT' }); };
@@ -305,12 +307,12 @@ export function Player({
 
   return (
     <>
-      {/* Hidden YouTube IFrame Player — always mounted so YT.Player can attach */}
-      <div style={{ position: 'fixed', width: 1, height: 1, overflow: 'hidden', top: -10, left: -10, zIndex: -1 }}>
+      {/* Hidden YouTube IFrame — always mounted from page load */}
+      <div style={{ position: 'fixed', width: 1, height: 1, overflow: 'hidden', top: -10, left: -10, zIndex: -1, pointerEvents: 'none' }}>
         <div id="yt-player-container" />
       </div>
 
-      {/* Visible Player Bar — only shown when a song is loaded */}
+      {/* Visible player bar */}
       {currentSong && (
         <div className="fixed bottom-0 left-0 right-0 h-24 bg-[#0a0810]/95 border-t border-[#1d1930] px-8 flex items-center justify-between z-50 shadow-[0_-10px_30px_rgba(0,0,0,0.5)]">
           {/* Left: Song Info */}
@@ -338,11 +340,9 @@ export function Player({
                 className="w-10 h-10 flex items-center justify-center bg-emerald-500 rounded-full text-zinc-950 hover:scale-105 active:scale-95 transition-all shadow-[0_0_15px_rgba(16,185,129,0.3)]"
                 onClick={handlePlayPause}
               >
-                {isPlaying ? (
-                  <Pause className="w-5 h-5 text-zinc-950 fill-zinc-950" />
-                ) : (
-                  <Play className="w-5 h-5 text-zinc-950 fill-zinc-950 ml-0.5" />
-                )}
+                {isPlaying
+                  ? <Pause className="w-5 h-5 text-zinc-950 fill-zinc-950" />
+                  : <Play className="w-5 h-5 text-zinc-950 fill-zinc-950 ml-0.5" />}
               </button>
               <button onClick={handleNext} className="text-zinc-400 hover:text-white transition">
                 <SkipForward className="w-5 h-5 fill-current" />
@@ -367,11 +367,9 @@ export function Player({
                   onClick={copyInviteLink}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#1b172e] border border-[#2b244d] text-zinc-300 hover:bg-[#25203f] hover:text-white transition text-xs font-bold"
                 >
-                  {copied ? (
-                    <><Check className="w-3.5 h-3.5 text-emerald-400" /><span className="text-emerald-400">Link copied</span></>
-                  ) : (
-                    <><Copy className="w-3.5 h-3.5" /><span>COPY INVITE LINK</span></>
-                  )}
+                  {copied
+                    ? <><Check className="w-3.5 h-3.5 text-emerald-400" /><span className="text-emerald-400">Link copied</span></>
+                    : <><Copy className="w-3.5 h-3.5" /><span>COPY INVITE LINK</span></>}
                 </button>
                 <button
                   onClick={() => setShowUsers(!showUsers)}
