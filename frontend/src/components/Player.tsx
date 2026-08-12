@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Users, Copy, Check } from 'lucide-react';
+import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Users, Copy, Check, Shuffle, Heart, MoreHorizontal } from 'lucide-react';
 import { RoomSocket } from '../services/socket';
 import type { SocketMessage } from '../services/socket';
 import type { Song, Room } from '../types';
@@ -312,84 +312,104 @@ export function Player({
         <div id="yt-player-container" />
       </div>
 
-      {/* Visible player bar */}
+      {/* Musfluent-style player bar */}
       {currentSong && (
-        <div className="fixed bottom-0 left-0 right-0 h-24 bg-[#0a0810]/95 border-t border-[#1d1930] px-8 flex items-center justify-between z-50 shadow-[0_-10px_30px_rgba(0,0,0,0.5)]">
+        <div
+          className="fixed bottom-0 left-0 right-0 z-50 flex items-center justify-between px-6"
+          style={{
+            height: 80,
+            background: 'rgba(10, 4, 30, 0.97)',
+            borderTop: '1px solid rgba(255,255,255,0.06)',
+            backdropFilter: 'blur(20px)',
+          }}
+        >
           {/* Left: Song Info */}
-          <div className="flex items-center gap-4 w-1/3 min-w-0">
-            <div className="w-14 h-14 rounded-xl overflow-hidden bg-[#161224] border border-[#2d264a] flex-shrink-0 shadow-md">
+          <div className="flex items-center gap-3 w-72 min-w-0">
+            <div className="w-12 h-12 rounded-xl overflow-hidden bg-white/10 flex-shrink-0 shadow-lg">
               {currentSong.thumbnails?.[0]?.url && (
                 <img src={currentSong.thumbnails[0].url} alt="Cover" className="w-full h-full object-cover" />
               )}
             </div>
-            <div className="min-w-0">
-              <p className="text-white font-bold truncate text-sm">{currentSong.title}</p>
-              <p className="text-zinc-400 text-xs truncate font-medium">
+            <div className="min-w-0 flex-1">
+              <p className="text-white font-bold truncate text-sm leading-tight">{currentSong.title}</p>
+              <p className="text-white/40 text-xs truncate mt-0.5">
                 {currentSong.artists?.map((a: any) => a.name).join(', ')}
               </p>
             </div>
+            <button className="text-white/30 hover:text-[#18FF6D] transition flex-shrink-0">
+              <Heart className="w-4 h-4" />
+            </button>
           </div>
 
-          {/* Center: Controls */}
-          <div className="flex flex-col items-center w-1/3 max-w-lg gap-2">
-            <div className="flex items-center gap-6">
-              <button onClick={handlePrev} className="text-zinc-400 hover:text-white transition">
+          {/* Center: Controls + Progress */}
+          <div className="flex flex-col items-center flex-1 max-w-xl gap-1.5 px-8">
+            <div className="flex items-center gap-5">
+              <button className="text-white/25 hover:text-white/70 transition">
+                <Shuffle className="w-4 h-4" />
+              </button>
+              <button onClick={handlePrev} className="text-white/50 hover:text-white transition">
                 <SkipBack className="w-5 h-5 fill-current" />
               </button>
               <button
-                className="w-10 h-10 flex items-center justify-center bg-emerald-500 rounded-full text-zinc-950 hover:scale-105 active:scale-95 transition-all shadow-[0_0_15px_rgba(16,185,129,0.3)]"
                 onClick={handlePlayPause}
+                className="w-11 h-11 flex items-center justify-center rounded-full transition-all hover:scale-105 active:scale-95"
+                style={{ background: '#18FF6D', boxShadow: '0 0 20px rgba(24,255,109,0.4)' }}
               >
                 {isPlaying
-                  ? <Pause className="w-5 h-5 text-zinc-950 fill-zinc-950" />
-                  : <Play className="w-5 h-5 text-zinc-950 fill-zinc-950 ml-0.5" />}
+                  ? <Pause className="w-5 h-5 text-black fill-black" />
+                  : <Play className="w-5 h-5 text-black fill-black ml-0.5" />}
               </button>
-              <button onClick={handleNext} className="text-zinc-400 hover:text-white transition">
+              <button onClick={handleNext} className="text-white/50 hover:text-white transition">
                 <SkipForward className="w-5 h-5 fill-current" />
               </button>
+              <button className="text-white/25 hover:text-white/70 transition">
+                <MoreHorizontal className="w-4 h-4" />
+              </button>
             </div>
-            <div className="flex items-center gap-2 w-full text-[10px] font-bold text-zinc-500">
-              <span className="w-10 text-right">{formatTime(progress)}</span>
+            <div className="flex items-center gap-3 w-full">
+              <span className="text-white/30 text-[10px] font-medium w-8 text-right">{formatTime(progress)}</span>
               <input
                 type="range" min={0} max={duration || 0} value={progress}
                 onChange={handleSeek}
-                className="flex-1 h-1 bg-[#1e1a30] rounded-full appearance-none cursor-pointer accent-emerald-500 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:bg-emerald-400 [&::-webkit-slider-thumb]:rounded-full hover:[&::-webkit-slider-thumb]:scale-125 transition-all"
+                className="flex-1"
+                style={{ accentColor: '#18FF6D' }}
               />
-              <span className="w-10">{formatTime(duration)}</span>
+              <span className="text-white/30 text-[10px] font-medium w-8">{formatTime(duration)}</span>
             </div>
           </div>
 
           {/* Right: Volume & Room Controls */}
-          <div className="flex items-center justify-end w-1/3 gap-4">
+          <div className="flex items-center justify-end gap-3 w-72">
             {roomId && roomData && (
               <div className="relative flex items-center gap-2">
                 <button
                   onClick={copyInviteLink}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#1b172e] border border-[#2b244d] text-zinc-300 hover:bg-[#25203f] hover:text-white transition text-xs font-bold"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/5 text-white/50 hover:bg-white/10 hover:text-white transition text-xs font-semibold"
                 >
                   {copied
-                    ? <><Check className="w-3.5 h-3.5 text-emerald-400" /><span className="text-emerald-400">Link copied</span></>
-                    : <><Copy className="w-3.5 h-3.5" /><span>COPY INVITE LINK</span></>}
+                    ? <><Check className="w-3.5 h-3.5 text-[#18FF6D]" /><span className="text-[#18FF6D]">Copied</span></>
+                    : <><Copy className="w-3.5 h-3.5" /><span>Invite</span></>}
                 </button>
                 <button
                   onClick={() => setShowUsers(!showUsers)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#1b172e] border border-[#2b244d] text-zinc-300 hover:bg-[#25203f] hover:text-white transition text-xs font-bold"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/5 text-white/50 hover:bg-white/10 hover:text-white transition text-xs font-semibold"
                 >
-                  <Users className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>{roomData.users.length} listening</span>
+                  <Users className="w-3.5 h-3.5 text-[#18FF6D]" />
+                  <span>{roomData.users.length}</span>
                 </button>
                 {showUsers && (
-                  <div className="absolute right-0 bottom-14 w-64 bg-[#0e0c15] border border-[#231e3d] rounded-2xl shadow-2xl p-4 flex flex-col gap-3 z-50">
-                    <div className="text-[10px] font-bold text-zinc-500 tracking-wider uppercase">PEOPLE IN ROOM</div>
-                    <div className="flex flex-col gap-2 max-h-48 overflow-y-auto pr-1">
+                  <div className="absolute right-0 bottom-16 w-56 rounded-2xl p-4 flex flex-col gap-3 z-50"
+                    style={{ background: '#100830', border: '1px solid rgba(255,255,255,0.08)' }}>
+                    <div className="text-[10px] font-bold text-white/30 tracking-widest uppercase">People in Room</div>
+                    <div className="flex flex-col gap-2 max-h-40 overflow-y-auto">
                       {roomData.users.map((user: any) => (
-                        <div key={user.id} className="flex items-center justify-between text-sm">
-                          <span className="text-zinc-200 truncate flex items-center gap-2">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block"></span>
+                        <div key={user.id} className="flex items-center justify-between">
+                          <span className="text-white/60 text-xs truncate flex items-center gap-2">
+                            <span className="w-1.5 h-1.5 rounded-full bg-[#18FF6D] inline-block" />
                             {user.name}
                           </span>
                           {roomData.hostId === user.id && (
-                            <span className="text-[9px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-1.5 py-0.5 rounded-md font-bold tracking-wider">HOST</span>
+                            <span className="text-[9px] bg-[#18FF6D]/20 text-[#18FF6D] px-1.5 py-0.5 rounded font-bold">HOST</span>
                           )}
                         </div>
                       ))}
