@@ -93,6 +93,27 @@ async def websocket_endpoint(
                 song = message.get("song")
                 if song:
                     updated_room = room_service.update_track(room_id, song)
+            elif msg_type == "ROOM_ADD_TO_PLAYLIST":
+                song = message.get("song")
+                if song:
+                    updated_room = room_service.add_to_playlist(room_id, song)
+            elif msg_type == "ROOM_REMOVE_FROM_PLAYLIST":
+                index = message.get("index")
+                if index is not None:
+                    updated_room = room_service.remove_from_playlist(room_id, index)
+            elif msg_type == "ROOM_CLEAR_PLAYLIST":
+                updated_room = room_service.clear_playlist(room_id)
+            elif msg_type == "ROOM_CHAT":
+                text = message.get("text", "")
+                sender_name = message.get("userName", "Anonymous")
+                await manager.broadcast_to_room(room_id, {
+                    "type": "ROOM_CHAT",
+                    "userId": userId,
+                    "userName": sender_name,
+                    "text": text,
+                    "timestamp": int(time.time() * 1000)
+                })
+                continue
             elif msg_type == "ROOM_SYNC_REQUEST":
                 current_room = room_service.get_room(room_id)
                 if current_room:

@@ -204,11 +204,20 @@ class RoomService:
         room.currentSong = song
         room.currentTrackId = song.get("videoId")
         
-        # Add to playlist if not already present or update the playlist
-        if song not in room.playlist:
-            # Simple policy: insert after current song and advance
-            room.playlist.append(song)
-            room.playlistIndex = len(room.playlist) - 1
+        # Check if the song is already in the upcoming queue (at or after playlistIndex)
+        found_idx = -1
+        for i in range(room.playlistIndex, len(room.playlist)):
+            if room.playlist[i].get("videoId") == song.get("videoId"):
+                found_idx = i
+                break
+                    
+        if found_idx != -1:
+            room.playlistIndex = found_idx
+        else:
+            # Insert right after current song to preserve the remaining queue
+            insert_pos = room.playlistIndex + 1 if room.playlist else 0
+            room.playlist.insert(insert_pos, song)
+            room.playlistIndex = insert_pos
             
         room.playback.position = 0.0
         if room.playback.isPlaying:
@@ -251,6 +260,61 @@ class RoomService:
             if room.playback.isPlaying:
                 room.playback.startedAt = now
             room.version += 1
+        return room
+
+    def add_to_playlist(self, room_id: str, song: Dict[str, Any]) -> Optional[Room]:
+        room = self.get_room(room_id)
+        if not room:
+            return None
+        
+        room.playlist.append(song)
+        
+        # If no song is currently set, make this the current song
+        if room.currentSong is None:
+            room.currentSong = song
+            room.currentTrackId = song.get("videoId")
+            room.playlistIndex = 0
+            
+        room.version += 1
+        return room
+
+    def remove_from_playlist(self, room_id: str, index: int) -> Optional[Room]:
+        room = self.get_room(room_id)
+        if not room:
+            return None
+        
+        if 0 <= index < len(room.playlist):
+            room.playlist.pop(index)
+            # Adjust index if necessary
+            if room.playlistIndex >= len(room.playlist):
+                room.playlistIndex = max(0, len(room.playlist) - 1)
+            
+            if room.playlist:
+                room.currentSong = room.playlist[room.playlistIndex]
+                room.currentTrackId = room.currentSong.get("videoId")
+            else:
+                room.currentSong = None
+                room.currentTrackId = None
+                room.playback.isPlaying = False
+                room.playback.position = 0.0
+                room.playback.startedAt = None
+                
+            room.version += 1
+        return room
+
+    def clear_playlist(self, room_id: str) -> Optional[Room]:
+        room = self.get_room(room_id)
+        if not room:
+            return None
+        
+        room.playlist = []
+        room.playlistIndex = 0
+        room.currentSong = None
+        room.currentTrackId = None
+        room.playback.isPlaying = False
+        room.playback.position = 0.0
+        room.playback.startedAt = None
+        room.version += 1
         return room
 
     def update_user_activity(self, room_id: str, user_id: str):

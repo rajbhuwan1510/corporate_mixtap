@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Users, Copy, Check, Shuffle, Heart, MoreHorizontal } from 'lucide-react';
+import { Play, Pause, SkipBack, SkipForward, Users, Shuffle, Heart, Repeat } from 'lucide-react';
 import { RoomSocket } from '../services/socket';
 import type { SocketMessage } from '../services/socket';
 import type { Song, Room } from '../types';
@@ -13,37 +13,53 @@ declare global {
 
 interface PlayerProps {
   currentSong: Song | null;
+  onNextSong?: () => void;
+  volume?: number;
   roomId?: string | null;
   isJoined?: boolean;
   userId?: string;
   userName?: string;
   onRoomStateChange?: (room: Room) => void;
+  onSocketReady?: (sendFn: ((data: any) => void) | null) => void;
+  onChatMessageReceived?: (chat: { userId: string; userName: string; text: string; timestamp: number }) => void;
+  isRadio?: boolean;
 }
 
 export function Player({
-  currentSong: propSong,
+  currentSong,
+  onNextSong,
+  volume = 80,
   roomId = null,
   isJoined = false,
   userId = '',
   userName = '',
-  onRoomStateChange
+  onRoomStateChange,
+  onSocketReady,
+  onChatMessageReceived,
+  isRadio = false
 }: PlayerProps) {
   const playerRef = useRef<any>(null);
   const playerReadyRef = useRef(false);
   const pendingSongRef = useRef<Song | null>(null);
   const pendingPlayRef = useRef(false);
+  const lastVideoIdRef = useRef<string | null>(null);
+  const onSocketReadyRef = useRef(onSocketReady);
+  useEffect(() => {
+    onSocketReadyRef.current = onSocketReady;
+  });
 
-  const [currentSong, setCurrentSong] = useState<Song | null>(propSong);
+  // currentSong is now consumed directly from props
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [volume, setVolume] = useState(100);
-  const [isMuted, setIsMuted] = useState(false);
+
+  // Room presence UI state
   const [roomData, setRoomData] = useState<Room | null>(null);
   const [socket, setSocket] = useState<RoomSocket | null>(null);
   const [copied, setCopied] = useState(false);
   const [showUsers, setShowUsers] = useState(false);
 
+  // Sync offsets
   const serverOffsetRef = useRef<number>(0);
   const driftCheckIntervalRef = useRef<any>(null);
   const progressIntervalRef = useRef<any>(null);
@@ -62,7 +78,7 @@ export function Player({
     try {
       setProgress(0);
       setDuration(0);
-      setIsPlaying(false);
+      setIsPlaying(autoplay);
       if (autoplay) {
         playerRef.current.loadVideoById(song.videoId);
       } else {
@@ -96,7 +112,7 @@ export function Player({
           onReady: (e: any) => {
             console.log('[Player] YT.Player ready');
             playerReadyRef.current = true;
-            e.target.setVolume(100);
+            e.target.setVolume(volume);
             // Flush any queued song
             if (pendingSongRef.current) {
               const song = pendingSongRef.current;
@@ -126,11 +142,9 @@ export function Player({
       });
     };
 
-    // If YT API is already loaded (e.g. hot reload), initialize immediately
     if (window.YT && window.YT.Player) {
       initPlayer();
     } else {
-      // Otherwise inject the script and wait for the callback
       window.onYouTubeIframeAPIReady = () => {
         console.log('[Player] onYouTubeIframeAPIReady fired');
         initPlayer();
@@ -144,7 +158,6 @@ export function Player({
       }
     }
 
-    // Progress ticker
     progressIntervalRef.current = setInterval(() => {
       if (playerRef.current && playerReadyRef.current) {
         try {
@@ -159,15 +172,26 @@ export function Player({
     return () => clearInterval(progressIntervalRef.current);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ─── Sync propSong → currentSong (non-room mode) ─────────────────────────
+  // Sync volume changes from parent
   useEffect(() => {
-    if (!roomId) setCurrentSong(propSong);
-  }, [propSong, roomId]);
+    if (playerReadyRef.current && playerRef.current) {
+      playerRef.current.setVolume(volume);
+    }
+  }, [volume]);
 
-  // ─── Load video when currentSong changes ─────────────────────────────────
+  // propSong sync replaced by direct prop usage
+
+  // ─── Load video when videoId changes ─────────────────────────────────
   useEffect(() => {
-    if (!currentSong) return;
+    if (!currentSong) {
+      lastVideoIdRef.current = null;
+      return;
+    }
+    if (currentSong.videoId === lastVideoIdRef.current) {
+      return; // Do NOT reload/restart the song if it hasn't changed!
+    }
     console.log('[Player] currentSong changed:', currentSong.videoId);
+    lastVideoIdRef.current = currentSong.videoId;
     loadVideo(currentSong, true);
   }, [currentSong, loadVideo]);
 
@@ -181,6 +205,15 @@ export function Player({
     const roomSocket = new RoomSocket(roomId, userId, userName);
     setSocket(roomSocket);
     const unsubscribe = roomSocket.subscribe((msg: SocketMessage) => {
+      if (msg.type === 'ROOM_CHAT') {
+        onChatMessageReceived?.({
+          userId: msg.userId,
+          userName: msg.userName,
+          text: msg.text,
+          timestamp: msg.timestamp
+        });
+        return;
+      }
       if (
         msg.type === 'ROOM_STATE' ||
         msg.type === 'ROOM_SYNC_RESPONSE' ||
@@ -192,8 +225,7 @@ export function Player({
         setRoomData(room);
         onRoomStateChange?.(room);
         if (msg.serverTime) serverOffsetRef.current = msg.serverTime - Date.now();
-        if (room.currentSong) setCurrentSong(room.currentSong);
-        else setCurrentSong(null);
+        // room.currentSong is synchronized via App.tsx props mapping
         setIsPlaying(room.playback.isPlaying);
         if (room.playback.isPlaying) playerRef.current?.playVideo?.();
         else playerRef.current?.pauseVideo?.();
@@ -216,12 +248,16 @@ export function Player({
     return () => { unsubscribe(); roomSocket.close(); setSocket(null); setRoomData(null); };
   }, [roomId, isJoined, userId, userName]);
 
-  // ─── Sync propSong to room ────────────────────────────────────────────────
+  // Expose socket sending function to the parent component
   useEffect(() => {
-    if (roomId && isJoined && socket && propSong && (!currentSong || propSong.videoId !== currentSong.videoId)) {
-      socket.send({ type: 'ROOM_TRACK_CHANGED', song: propSong });
+    if (socket) {
+      onSocketReadyRef.current?.((data: any) => socket.send(data));
+    } else {
+      onSocketReadyRef.current?.(null);
     }
-  }, [propSong, roomId, isJoined, socket]);
+  }, [socket]);
+
+
 
   // ─── Play/Pause (non-room) ────────────────────────────────────────────────
   useEffect(() => {
@@ -250,22 +286,21 @@ export function Player({
 
   // ─── Handlers ────────────────────────────────────────────────────────────
   const handleEnded = useCallback(() => {
-    if (roomId && isJoined && socket) socket.send({ type: 'ROOM_NEXT' });
-    else setIsPlaying(false);
-  }, [roomId, isJoined, socket]);
+    if (roomId && isJoined && socket) {
+      socket.send({ type: 'ROOM_NEXT' });
+    } else if (onNextSong) {
+      onNextSong();
+    } else {
+      setIsPlaying(false);
+    }
+  }, [roomId, isJoined, socket, onNextSong]);
   handleEndedRef.current = handleEnded;
 
   const handlePlayPause = () => {
     if (roomId && isJoined && socket) {
       socket.send({ type: isPlaying ? 'ROOM_PAUSE' : 'ROOM_PLAY' });
     } else {
-      if (!isPlaying) {
-        playerRef.current?.playVideo?.();
-        setIsPlaying(true);
-      } else {
-        playerRef.current?.pauseVideo?.();
-        setIsPlaying(false);
-      }
+      setIsPlaying(p => !p);
     }
   };
 
@@ -275,20 +310,13 @@ export function Player({
     else { playerRef.current?.seekTo?.(time, true); setProgress(time); }
   };
 
-  const handleNext = () => { if (roomId && isJoined && socket) socket.send({ type: 'ROOM_NEXT' }); };
-  const handlePrev = () => { if (roomId && isJoined && socket) socket.send({ type: 'ROOM_PREVIOUS' }); };
-
-  const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = Number(e.target.value);
-    setVolume(val);
-    playerRef.current?.setVolume?.(val);
-    if (val === 0) setIsMuted(true);
-    else if (isMuted) { setIsMuted(false); playerRef.current?.unMute?.(); }
+  const handleNext = () => {
+    if (roomId && isJoined && socket) socket.send({ type: 'ROOM_NEXT' });
+    else if (onNextSong) onNextSong();
   };
 
-  const toggleMute = () => {
-    if (isMuted) { playerRef.current?.unMute?.(); setIsMuted(false); }
-    else { playerRef.current?.mute?.(); setIsMuted(true); }
+  const handlePrev = () => {
+    if (roomId && isJoined && socket) socket.send({ type: 'ROOM_PREVIOUS' });
   };
 
   const copyInviteLink = () => {
@@ -312,104 +340,96 @@ export function Player({
         <div id="yt-player-container" />
       </div>
 
-      {/* Musfluent-style player bar */}
+      {/* Sleek Premium Corporate Player Bar */}
       {currentSong && (
-        <div
-          className="fixed bottom-0 left-0 right-0 z-50 flex items-center justify-between px-6"
-          style={{
-            height: 80,
-            background: 'rgba(10, 4, 30, 0.97)',
-            borderTop: '1px solid rgba(255,255,255,0.06)',
-            backdropFilter: 'blur(20px)',
-          }}
-        >
+        <div className={`absolute bottom-0 left-0 right-0 h-20 bg-[#090c15] border-t border-white/5 px-6 flex items-center justify-between z-30 shadow-[0_-8px_32px_rgba(0,0,0,0.5)] ${isPlaying ? 'playing-active' : ''}`}>
           {/* Left: Song Info */}
           <div className="flex items-center gap-3 w-72 min-w-0">
-            <div className="w-12 h-12 rounded-xl overflow-hidden bg-white/10 flex-shrink-0 shadow-lg">
+            <div className="w-10 h-10 rounded-xl overflow-hidden bg-white/10 flex-shrink-0 shadow border border-white/5">
               {currentSong.thumbnails?.[0]?.url && (
-                <img src={currentSong.thumbnails[currentSong.thumbnails.length - 1].url} alt="Cover" className="w-full h-full object-cover" />
+                <img src={currentSong.thumbnails[currentSong.thumbnails.length - 1].url} alt="" className="w-full h-full object-cover" />
               )}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-white font-bold truncate text-sm leading-tight">{currentSong.title}</p>
-              <p className="text-white/40 text-xs truncate mt-0.5">
+              <p className="text-white font-bold truncate text-xs leading-snug">{currentSong.title}</p>
+              <p className="text-white/40 text-[10px] truncate leading-none mt-0.5">
                 {currentSong.artists?.map((a: any) => a.name).join(', ')}
               </p>
             </div>
-            <button className="text-white/30 hover:text-[#18FF6D] transition flex-shrink-0">
+            <button className="text-white/20 hover:text-[var(--theme-accent)] transition flex-shrink-0">
               <Heart className="w-4 h-4" />
             </button>
           </div>
 
-          {/* Center: Controls + Progress */}
-          <div className="flex flex-col items-center flex-1 max-w-xl gap-1.5 px-8">
-            <div className="flex items-center gap-5">
-              <button className="text-white/25 hover:text-white/70 transition">
-                <Shuffle className="w-4 h-4" />
+          {/* Center: Playback Controls & Clean Progress Bar */}
+          <div className="flex flex-col items-center flex-1 max-w-lg gap-1 px-4">
+            <div className="flex items-center gap-4">
+              {isRadio && (
+                <span className="text-[9px] px-2 py-0.5 rounded bg-red-500/20 text-red-400 font-black tracking-widest uppercase animate-pulse mr-1">LIVE RADIO</span>
+              )}
+              <button className={`transition ${isRadio ? 'opacity-10 cursor-not-allowed pointer-events-none' : 'text-white/20 hover:text-white/70'}`}>
+                <Shuffle className="w-3.5 h-3.5" />
               </button>
-              <button onClick={handlePrev} className="text-white/50 hover:text-white transition">
-                <SkipBack className="w-5 h-5 fill-current" />
+              <button onClick={handlePrev} className={`transition ${isRadio ? 'opacity-10 cursor-not-allowed pointer-events-none' : 'text-white/50 hover:text-white'}`}>
+                <SkipBack className="w-4 h-4 fill-current" />
               </button>
               <button
                 onClick={handlePlayPause}
-                className="w-11 h-11 flex items-center justify-center rounded-full transition-all hover:scale-105 active:scale-95"
-                style={{ background: '#18FF6D', boxShadow: '0 0 20px rgba(24,255,109,0.4)' }}
+                className="w-10 h-10 flex items-center justify-center rounded-full transition-all hover:scale-105 active:scale-95 text-white shadow-lg"
+                style={{ backgroundColor: 'var(--theme-accent)', boxShadow: '0 4px 12px var(--theme-accent-glow)' }}
               >
-                {isPlaying
-                  ? <Pause className="w-5 h-5 text-black fill-black" />
-                  : <Play className="w-5 h-5 text-black fill-black ml-0.5" />}
+                {isPlaying ? <Pause className="w-4.5 h-4.5 text-white fill-white" /> : <Play className="w-4.5 h-4.5 text-white fill-white ml-0.5" />}
               </button>
-              <button onClick={handleNext} className="text-white/50 hover:text-white transition">
-                <SkipForward className="w-5 h-5 fill-current" />
+              <button onClick={handleNext} className={`transition ${isRadio ? 'opacity-10 cursor-not-allowed pointer-events-none' : 'text-white/50 hover:text-white'}`}>
+                <SkipForward className="w-4 h-4 fill-current" />
               </button>
-              <button className="text-white/25 hover:text-white/70 transition">
-                <MoreHorizontal className="w-4 h-4" />
+              <button className={`transition ${isRadio ? 'opacity-10 cursor-not-allowed pointer-events-none' : 'text-white/20 hover:text-white/70'}`}>
+                <Repeat className="w-3.5 h-3.5" />
               </button>
             </div>
-            <div className="flex items-center gap-3 w-full">
-              <span className="text-white/30 text-[10px] font-medium w-8 text-right">{formatTime(progress)}</span>
+            
+            <div className="flex items-center gap-3 w-full mt-0.5">
+              <span className="text-white text-[10px] font-bold w-8 text-right">{formatTime(progress)}</span>
               <input
                 type="range" min={0} max={duration || 0} value={progress}
                 onChange={handleSeek}
                 className="flex-1"
-                style={{ accentColor: '#18FF6D' }}
+                style={{ accentColor: 'var(--theme-accent)' }}
+                disabled={isRadio}
               />
-              <span className="text-white/30 text-[10px] font-medium w-8">{formatTime(duration)}</span>
+              <span className="text-white text-[10px] font-bold w-8">{formatTime(duration)}</span>
             </div>
           </div>
 
-          {/* Right: Volume & Room Controls */}
+          {/* Right: Invite & Room status controls */}
           <div className="flex items-center justify-end gap-3 w-72">
             {roomId && roomData && (
               <div className="relative flex items-center gap-2">
                 <button
                   onClick={copyInviteLink}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/5 text-white/50 hover:bg-white/10 hover:text-white transition text-xs font-semibold"
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white/5 text-white/50 hover:bg-white/10 hover:text-white transition text-[10px] font-bold uppercase tracking-wider"
                 >
-                  {copied
-                    ? <><Check className="w-3.5 h-3.5 text-[#18FF6D]" /><span className="text-[#18FF6D]">Copied</span></>
-                    : <><Copy className="w-3.5 h-3.5" /><span>Invite</span></>}
+                  {copied ? <span className="text-[var(--theme-accent)]">Copied</span> : <span>Invite</span>}
                 </button>
                 <button
                   onClick={() => setShowUsers(!showUsers)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/5 text-white/50 hover:bg-white/10 hover:text-white transition text-xs font-semibold"
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white/5 text-white/50 hover:bg-white/10 hover:text-white transition text-[10px] font-bold uppercase tracking-wider"
                 >
-                  <Users className="w-3.5 h-3.5 text-[#18FF6D]" />
+                  <Users className="w-3.5 h-3.5 mr-1" style={{ color: 'var(--theme-accent)' }} />
                   <span>{roomData.users.length}</span>
                 </button>
                 {showUsers && (
-                  <div className="absolute right-0 bottom-16 w-56 rounded-2xl p-4 flex flex-col gap-3 z-50"
-                    style={{ background: '#100830', border: '1px solid rgba(255,255,255,0.08)' }}>
-                    <div className="text-[10px] font-bold text-white/30 tracking-widest uppercase">People in Room</div>
-                    <div className="flex flex-col gap-2 max-h-40 overflow-y-auto">
+                  <div className="absolute right-0 bottom-14 w-52 rounded-xl p-3.5 z-50 bg-[#090c15] border border-white/5 shadow-2xl">
+                    <div className="text-[9px] font-bold text-white/25 tracking-widest uppercase mb-2">People listening</div>
+                    <div className="flex flex-col gap-1.5 max-h-36 overflow-y-auto">
                       {roomData.users.map((user: any) => (
-                        <div key={user.id} className="flex items-center justify-between">
-                          <span className="text-white/60 text-xs truncate flex items-center gap-2">
-                            <span className="w-1.5 h-1.5 rounded-full bg-[#18FF6D] inline-block" />
+                        <div key={user.id} className="flex items-center justify-between text-[11px] font-medium">
+                          <span className="text-white/60 truncate flex items-center gap-2">
+                            <span className="w-1 h-1 rounded-full" style={{ backgroundColor: 'var(--theme-accent)' }} />
                             {user.name}
                           </span>
                           {roomData.hostId === user.id && (
-                            <span className="text-[9px] bg-[#18FF6D]/20 text-[#18FF6D] px-1.5 py-0.5 rounded font-bold">HOST</span>
+                            <span className="text-[8px] px-1 py-0.5 rounded font-black text-white" style={{ backgroundColor: 'var(--theme-accent-glow)' }}>HOST</span>
                           )}
                         </div>
                       ))}
@@ -418,16 +438,6 @@ export function Player({
                 )}
               </div>
             )}
-            <div className="flex items-center gap-2">
-              <button onClick={toggleMute} className="text-zinc-400 hover:text-white transition">
-                {isMuted || volume === 0 ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
-              </button>
-              <input
-                type="range" min={0} max={100} step={1} value={isMuted ? 0 : volume}
-                onChange={handleVolumeChange}
-                className="w-20 h-1 bg-[#1e1a30] rounded-full appearance-none cursor-pointer accent-emerald-500 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-2.5 [&::-webkit-slider-thumb]:h-2.5 [&::-webkit-slider-thumb]:bg-emerald-400 [&::-webkit-slider-thumb]:rounded-full"
-              />
-            </div>
           </div>
         </div>
       )}
