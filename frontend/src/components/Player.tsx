@@ -340,9 +340,67 @@ export function Player({
         <div id="yt-player-container" />
       </div>
 
-      {/* Sleek Premium Corporate Player Bar */}
+      {/* ── Mobile Compact Player Bar ─────────────────────────────────────── */}
       {currentSong && (
-        <div className={`absolute bottom-0 left-0 right-0 h-20 bg-[#090c15] border-t border-white/5 px-6 flex items-center justify-between z-30 shadow-[0_-8px_32px_rgba(0,0,0,0.5)] ${isPlaying ? 'playing-active' : ''}`}>
+        <div className={`lg:hidden fixed left-0 right-0 z-40 bg-[#090c15] border-t border-white/5 shadow-[0_-4px_20px_rgba(0,0,0,0.6)] ${isPlaying ? 'playing-active' : ''}`}
+          style={{ bottom: 'calc(52px + var(--sab))' }}
+        >
+          {/* Thin progress bar at top */}
+          <div className="w-full h-[3px] bg-white/5 relative">
+            <div
+              className="h-full transition-all duration-300"
+              style={{
+                width: duration > 0 ? `${(progress / duration) * 100}%` : '0%',
+                backgroundColor: 'var(--theme-accent)',
+              }}
+            />
+          </div>
+
+          <div className="flex items-center gap-3 px-3 py-2">
+            {/* Thumbnail */}
+            <div className="w-10 h-10 rounded-lg overflow-hidden bg-white/10 flex-shrink-0 border border-white/5">
+              {currentSong.thumbnails?.[0]?.url && (
+                <img src={currentSong.thumbnails[currentSong.thumbnails.length - 1].url} alt="" className="w-full h-full object-cover" />
+              )}
+            </div>
+
+            {/* Song info */}
+            <div className="min-w-0 flex-1">
+              <p className="text-white font-bold truncate text-[11px] leading-snug">{currentSong.title}</p>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <p className="text-white/40 text-[9px] truncate flex-1">{currentSong.artists?.map((a: any) => a.name).join(', ')}</p>
+                <span className="text-white/25 text-[9px] font-bold flex-shrink-0">{formatTime(progress)} / {formatTime(duration)}</span>
+              </div>
+            </div>
+
+            {/* Live radio badge */}
+            {isRadio && (
+              <span className="text-[7px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-400 font-black tracking-widest uppercase animate-pulse flex-shrink-0">LIVE</span>
+            )}
+
+            {/* Play/Pause button */}
+            <button
+              onClick={handlePlayPause}
+              className="w-9 h-9 flex items-center justify-center rounded-full text-white flex-shrink-0 active:scale-90 transition-transform"
+              style={{ backgroundColor: 'var(--theme-accent)', boxShadow: '0 2px 8px var(--theme-accent-glow)' }}
+            >
+              {isPlaying ? <Pause className="w-4 h-4 text-white fill-white" /> : <Play className="w-4 h-4 text-white fill-white ml-0.5" />}
+            </button>
+
+            {/* Skip next */}
+            <button
+              onClick={handleNext}
+              className={`flex-shrink-0 transition ${isRadio ? 'opacity-10 pointer-events-none' : 'text-white/50 active:text-white'}`}
+            >
+              <SkipForward className="w-4.5 h-4.5 fill-current" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Sleek Premium Corporate Player Bar (Desktop only — mobile uses compact player in tab bar) */}
+      {currentSong && (
+        <div className={`absolute bottom-0 left-0 right-0 h-20 bg-[#090c15] border-t border-white/5 px-6 hidden lg:flex items-center justify-between z-30 shadow-[0_-8px_32px_rgba(0,0,0,0.5)] ${isPlaying ? 'playing-active' : ''}`}>
           {/* Left: Song Info */}
           <div className="flex items-center gap-3 w-72 min-w-0">
             <div className="w-10 h-10 rounded-xl overflow-hidden bg-white/10 flex-shrink-0 shadow border border-white/5">

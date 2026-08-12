@@ -8,7 +8,7 @@ import { api } from './services/api';
 import logoImg from './assets/logo.png';
 import {
   Home, Compass, Users, PlusCircle, Layout,
-  Trash2, Bell, MessageSquare, ChevronLeft, ListMusic
+  Trash2, Bell, MessageSquare, ChevronLeft, ListMusic, X, Radio
 } from 'lucide-react';
 
 const getOrCreateUserId = () => {
@@ -104,6 +104,9 @@ function App() {
   const [activeStation, setActiveStation] = useState<RadioStation | null>(null);
   const [stationSongIndex, setStationSongIndex] = useState<number>(0);
 
+  // Mobile panel state
+  const [mobilePanel, setMobilePanel] = useState<'none' | 'queue' | 'chat'>('none');
+
   // Room states
   const [roomId, setRoomId] = useState<string | null>(null);
   const [userName, setUserName] = useState<string>(getOrCreateUserName());
@@ -133,7 +136,7 @@ function App() {
   useEffect(() => {
     const handleLocationChange = () => {
       const path = window.location.pathname;
-      const match = path.match(/^\/room\/([A-Z0-9]+)$/);
+      const match = path.match(/^\/room\/([A-Z0-9\-]+)$/);
       setChatMessages([]);
       if (match) {
         setRoomId(match[1]);
@@ -166,7 +169,7 @@ function App() {
       setIsJoined(true);
       setRoomData(room);
     } catch {
-      alert('Failed to launch sync broadcast room.');
+      alert('Failed to launch corporate sync room.');
     }
   };
 
@@ -248,10 +251,10 @@ function App() {
   const displayQueue = isRoomActive ? roomData.playlist.slice(roomData.playlistIndex + 1) : queue;
 
   return (
-    <div className="w-full max-w-[1200px] h-[720px] bg-[#0c101b] border border-white/5 rounded-3xl overflow-hidden flex flex-row relative shadow-[0_32px_96px_rgba(0,0,0,0.8)]">
+    <div className="w-full h-dvh lg:max-w-[1200px] lg:h-[720px] bg-[#0c101b] lg:border lg:border-white/5 lg:rounded-3xl overflow-hidden flex flex-col lg:flex-row relative lg:shadow-[0_32px_96px_rgba(0,0,0,0.8)]">
       
-      {/* ── Corporate Sidebar Left ──────────────────────────────────────────── */}
-      <aside className="w-60 bg-[#090c15] flex-shrink-0 flex flex-col h-full border-r border-white/5 p-5 justify-between z-20">
+      {/* ── Corporate Sidebar Left (Desktop only) ──────────────────────────── */}
+      <aside className="hidden lg:flex w-60 bg-[#090c15] flex-shrink-0 flex-col h-full border-r border-white/5 p-5 justify-between z-20">
         <div className="flex flex-col gap-6">
           
           {/* Logo Header */}
@@ -294,17 +297,17 @@ function App() {
 
           {/* Sync Playback Rooms */}
           <div className="flex flex-col gap-1 text-xs font-semibold uppercase tracking-wider text-white/30">
-            <span className="px-3 mb-2">BROADCASTS</span>
+            <span className="px-3 mb-2">CORPORATE</span>
             <button
               onClick={handleCreateRoom}
               className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold hover:text-[#ed7700] hover:bg-[#ed7700]/5 transition w-full text-left normal-case tracking-normal"
               style={{ color: '#ed7700' }}
             >
-              <PlusCircle className="w-4 h-4" /> Start Broadcast
+              <PlusCircle className="w-4 h-4" /> Start Corporate
             </button>
             <button
               onClick={() => {
-                const code = prompt('Enter Broadcast Room Code:');
+                const code = prompt('Enter Corporate Room Code:');
                 if (code?.trim()) {
                   const clean = code.trim().toUpperCase();
                   window.history.pushState({}, '', `/room/${clean}`);
@@ -313,7 +316,7 @@ function App() {
               }}
               className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold text-purple-400 hover:text-purple-350 hover:bg-purple-500/5 transition w-full text-left normal-case tracking-normal"
             >
-              <Users className="w-4 h-4" /> Join Broadcast
+              <Users className="w-4 h-4" /> Join Corporate
             </button>
           </div>
 
@@ -333,24 +336,46 @@ function App() {
       </aside>
 
       {/* ── Main Dashboard Workspace ────────────────────────────────────────── */}
-      <main className="flex-1 flex flex-col h-full bg-[#0a0d15] relative overflow-hidden z-10">
+      <main className="flex-1 flex flex-col h-full bg-[#0a0d15] relative overflow-hidden z-10 min-h-0">
         
         {/* Top Header */}
-        <header className="flex-shrink-0 flex items-center justify-between px-8 py-5 border-b border-white/5">
-          <div>
-            <h1 className="text-base font-bold text-white leading-tight">
-              {roomId ? `Broadcast Room: ${roomId}` : activeTab === 'Discover' ? 'Explore Music' : 'Company Channels'}
-            </h1>
-            <p className="text-[10px] text-white/40 tracking-wider mt-1 uppercase font-semibold">
-              {roomId ? 'Synchronized Live Playback Session' : 'Music for the Modern Workplace'}
-            </p>
+        <header className="flex-shrink-0 flex items-center justify-between px-4 py-3 lg:px-8 lg:py-5 border-b border-white/5">
+          {/* Mobile: logo + title */}
+          <div className="flex items-center gap-3">
+            <img src={logoImg} alt="Logo" className="w-8 h-8 rounded-lg object-cover lg:hidden" />
+            <div>
+              <h1 className="text-sm lg:text-base font-bold text-white leading-tight">
+                {roomId ? `Room: ${roomId}` : activeTab === 'Discover' ? 'Explore Music' : 'Company Channels'}
+              </h1>
+              <p className="text-[9px] lg:text-[10px] text-white/40 tracking-wider mt-0.5 uppercase font-semibold">
+                {roomId ? 'Synchronized Live Playback Session' : 'Music for the Modern Workplace'}
+              </p>
+            </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            <button className="w-8 h-8 flex items-center justify-center rounded-xl bg-white/5 hover:bg-white/10 text-white/50 hover:text-white transition">
+          <div className="flex items-center gap-2">
+            {/* Mobile queue/chat toggle buttons */}
+            <button
+              onClick={() => setMobilePanel(mobilePanel === 'queue' ? 'none' : 'queue')}
+              className={`lg:hidden w-8 h-8 flex items-center justify-center rounded-xl transition ${
+                mobilePanel === 'queue' ? 'bg-[#0081c9] text-white' : 'bg-white/5 text-white/50 hover:bg-white/10 hover:text-white'
+              }`}
+            >
+              <ListMusic className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setMobilePanel(mobilePanel === 'chat' ? 'none' : 'chat')}
+              className={`lg:hidden w-8 h-8 flex items-center justify-center rounded-xl transition ${
+                mobilePanel === 'chat' ? 'bg-[#0081c9] text-white' : 'bg-white/5 text-white/50 hover:bg-white/10 hover:text-white'
+              }`}
+            >
               <MessageSquare className="w-4 h-4" />
             </button>
-            <button className="w-8 h-8 flex items-center justify-center rounded-xl bg-white/5 hover:bg-white/10 text-white/50 hover:text-white transition relative">
+            {/* Desktop header buttons */}
+            <button className="hidden lg:flex w-8 h-8 items-center justify-center rounded-xl bg-white/5 hover:bg-white/10 text-white/50 hover:text-white transition">
+              <MessageSquare className="w-4 h-4" />
+            </button>
+            <button className="hidden lg:flex w-8 h-8 items-center justify-center rounded-xl bg-white/5 hover:bg-white/10 text-white/50 hover:text-white transition relative">
               <Bell className="w-4 h-4" />
               <span className="absolute top-2.5 right-2.5 w-1.5 h-1.5 rounded-full" style={{ backgroundColor: '#0081c9' }} />
             </button>
@@ -358,73 +383,73 @@ function App() {
         </header>
 
         {/* Content Workspace Area */}
-        <div className="flex-1 flex overflow-hidden">
+        <div className="flex-1 flex overflow-hidden min-h-0">
           
-          <div className="flex-1 flex overflow-hidden">
+          <div className="flex-1 flex overflow-hidden min-h-0">
             {/* Room View */}
             {roomId ? (
               !isJoined ? (
-                <div className="flex-1 overflow-y-auto p-8 flex items-center justify-center">
+                <div className="flex-1 overflow-y-auto p-4 lg:p-8 flex items-center justify-center">
                   <JoinRoom roomId={roomId} onJoin={handleJoinRoom} />
                 </div>
               ) : (
-                <div className="flex-1 overflow-y-auto p-8 flex flex-col gap-6 max-w-4xl mx-auto w-full">
+                <div className="flex-1 overflow-y-auto p-4 lg:p-8 flex flex-col gap-4 lg:gap-6 max-w-4xl mx-auto w-full pb-36 lg:pb-28">
                   <div className="flex items-center gap-3">
                     <button onClick={navigateToHome} className="p-2 bg-white/5 hover:bg-white/10 rounded-full transition">
                       <ChevronLeft className="w-4 h-4 text-white/60" />
                     </button>
-                    <h2 className="text-lg font-bold text-white">Back to workspace</h2>
+                    <h2 className="text-base lg:text-lg font-bold text-white">Back to workspace</h2>
                   </div>
 
                   {roomData && (
-                    <div className="rounded-2xl p-6 flex gap-6 items-center border border-white/5 bg-gradient-to-r from-[#0081c9]/10 to-transparent">
+                    <div className="rounded-2xl p-4 lg:p-6 flex gap-4 lg:gap-6 items-center border border-white/5 bg-gradient-to-r from-[#0081c9]/10 to-transparent">
                       {roomData.currentSong?.thumbnails?.[0]?.url ? (
-                        <img src={roomData.currentSong.thumbnails[roomData.currentSong.thumbnails.length - 1].url} alt="" className="w-20 h-20 rounded-xl object-cover" />
+                        <img src={roomData.currentSong.thumbnails[roomData.currentSong.thumbnails.length - 1].url} alt="" className="w-14 h-14 lg:w-20 lg:h-20 rounded-xl object-cover" />
                       ) : (
-                        <div className="w-20 h-20 rounded-xl bg-white/5 flex items-center justify-center text-3xl">🎵</div>
+                        <div className="w-14 h-14 lg:w-20 lg:h-20 rounded-xl bg-white/5 flex items-center justify-center text-2xl lg:text-3xl">🎵</div>
                       )}
-                      <div>
-                        <span className="text-[10px] font-bold tracking-widest uppercase" style={{ color: '#0081c9' }}>● ROOM ACTIVE BROADCAST</span>
-                        <h3 className="text-lg font-extrabold text-white mt-1 truncate max-w-md">{roomData.currentSong?.title || 'No active song'}</h3>
-                        <p className="text-white/40 text-xs mt-0.5">{roomData.currentSong?.artists?.map(a => a.name).join(', ')}</p>
+                      <div className="min-w-0 flex-1">
+                        <span className="text-[9px] lg:text-[10px] font-bold tracking-widest uppercase" style={{ color: '#0081c9' }}>● CORPORATE ROOM ACTIVE</span>
+                        <h3 className="text-sm lg:text-lg font-extrabold text-white mt-1 truncate">{roomData.currentSong?.title || 'No active song'}</h3>
+                        <p className="text-white/40 text-[10px] lg:text-xs mt-0.5 truncate">{roomData.currentSong?.artists?.map(a => a.name).join(', ')}</p>
                       </div>
                     </div>
                   )}
 
-                  <div className="flex-1 flex flex-col min-h-0 bg-[#0e121d] rounded-2xl p-5 border border-white/5">
+                  <div className="flex-1 flex flex-col min-h-0 bg-[#0e121d] rounded-2xl p-4 lg:p-5 border border-white/5">
                     <h4 className="text-xs font-bold text-white/40 uppercase tracking-widest mb-3">Add playlist music</h4>
                     <Search onPlay={handleSelectSong} onQueue={handleAddToQueue} />
                   </div>
                 </div>
               )
             ) : activeTab === 'Discover' ? (
-              <div className="flex-1 overflow-y-auto px-8 py-6 pb-28">
+              <div className="flex-1 overflow-y-auto px-4 py-4 lg:px-8 lg:py-6 pb-36 lg:pb-28">
                 <Search onPlay={handleSelectSong} onQueue={handleAddToQueue} />
               </div>
             ) : (
-              <div className="flex-1 overflow-y-auto px-8 py-6 pb-28 flex flex-col gap-6">
+              <div className="flex-1 overflow-y-auto px-4 py-4 lg:px-8 lg:py-6 pb-36 lg:pb-28 flex flex-col gap-4 lg:gap-6">
                 <div>
                   <h2 className="text-xs font-bold text-white uppercase tracking-widest">Company Radio Stations</h2>
                   <p className="text-[10px] text-white/40 mt-1">Tune in to continuous corporate-friendly streams. Custom controls are disabled.</p>
                 </div>
                 
-                <div className="grid grid-cols-1 gap-4 max-w-2xl">
+                <div className="grid grid-cols-1 gap-3 lg:gap-4 max-w-2xl">
                   {RADIO_STATIONS.map((station) => {
                     const isTunedIn = activeStation?.id === station.id;
                     return (
                       <div 
                         key={station.id}
-                        className={`p-4 rounded-2xl border transition flex flex-row gap-4 items-center ${
+                        className={`p-3 lg:p-4 rounded-2xl border transition flex flex-row gap-3 lg:gap-4 items-center ${
                           isTunedIn 
                             ? 'bg-[#0081c9]/10 border-[#0081c9]/25' 
                             : 'bg-white/[0.01] border-white/5 hover:bg-white/[0.03]'
                         }`}
                       >
-                        <img src={station.coverUrl} alt="" className="w-16 h-16 rounded-xl object-cover border border-white/5 flex-shrink-0" />
+                        <img src={station.coverUrl} alt="" className="w-12 h-12 lg:w-16 lg:h-16 rounded-xl object-cover border border-white/5 flex-shrink-0" />
                         <div className="flex-1 min-w-0">
                           <span className="text-[9px] font-bold text-[#0081c9] uppercase tracking-wider">{station.genre}</span>
                           <h3 className="text-xs font-bold text-white truncate mt-0.5">{station.name}</h3>
-                          <p className="text-white/40 text-[10px] mt-1 leading-snug line-clamp-2">{station.description}</p>
+                          <p className="text-white/40 text-[10px] mt-1 leading-snug line-clamp-2 hidden sm:block">{station.description}</p>
                           <button
                             onClick={() => {
                               if (isTunedIn) {
@@ -437,7 +462,7 @@ function App() {
                                 setQueue([]);
                               }
                             }}
-                            className={`mt-2.5 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition ${
+                            className={`mt-2 lg:mt-2.5 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition ${
                               isTunedIn 
                                 ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30' 
                                 : 'bg-[#0081c9] text-white hover:bg-[#33a3ef]'
@@ -454,8 +479,8 @@ function App() {
             )}
           </div>
 
-          {/* Right Column: Queue & Chatroom Sidebar panel */}
-          <aside className="w-72 flex-shrink-0 border-l border-white/5 flex flex-col overflow-hidden pb-28">
+          {/* Right Column: Queue & Chatroom Sidebar panel (Desktop) */}
+          <aside className="hidden lg:flex w-72 flex-shrink-0 border-l border-white/5 flex-col overflow-hidden pb-28">
             {/* Top Half: Play Queue */}
             <div className="flex-1 flex flex-col p-6 overflow-y-auto min-h-0 border-b border-white/5 gap-4">
               <div className="flex items-between justify-between">
@@ -515,7 +540,139 @@ function App() {
 
       </main>
 
-      {/* ── Corporate Bottom Music Player Controller ─────────────────────────── */}
+      {/* ── Mobile Slide-Over Panel (Queue / Chat) ────────────────────────────── */}
+      {mobilePanel !== 'none' && (
+        <div className="lg:hidden fixed inset-0 z-50 flex">
+          {/* Backdrop */}
+          <div className="absolute inset-0 bg-black/60" onClick={() => setMobilePanel('none')} />
+          {/* Panel */}
+          <div className="absolute right-0 top-0 bottom-0 w-[85%] max-w-sm bg-[#090c15] border-l border-white/5 flex flex-col slide-over-active">
+            {/* Panel header */}
+            <div className="flex items-center justify-between p-4 border-b border-white/5">
+              <div className="flex items-center gap-2">
+                {mobilePanel === 'queue' ? (
+                  <><ListMusic className="w-4 h-4" style={{ color: '#0081c9' }} /><span className="text-sm font-bold text-white">{activeStation ? 'Radio Stream' : 'Play Queue'}</span></>
+                ) : (
+                  <><MessageSquare className="w-4 h-4" style={{ color: '#0081c9' }} /><span className="text-sm font-bold text-white">Chat</span></>
+                )}
+              </div>
+              <button onClick={() => setMobilePanel('none')} className="p-1.5 rounded-lg bg-white/5 text-white/50 hover:text-white transition">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Panel content */}
+            {mobilePanel === 'queue' ? (
+              <div className="flex-1 flex flex-col p-4 overflow-y-auto gap-3">
+                {displayQueue.length > 0 && !activeStation && (
+                  <button onClick={() => { handleClearQueue(); }} className="self-end text-[10px] text-red-400 font-bold uppercase tracking-wider">Clear All</button>
+                )}
+                {activeStation ? (
+                  <div className="flex flex-col items-center justify-center py-12 text-center text-white/30 border border-dashed border-[#0081c9]/20 rounded-2xl bg-[#0081c9]/[0.02] p-4 gap-2">
+                    <div className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
+                    <p className="text-xs font-bold text-white mt-1">Live Radio Active</p>
+                    <p className="text-[10px] leading-relaxed">Queue is disabled on company channels.</p>
+                  </div>
+                ) : displayQueue.length > 0 ? (
+                  displayQueue.map((song, idx) => (
+                    <div key={song.videoId + '-' + idx} className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-white/5 border border-white/5">
+                      <img src={song.thumbnails[0]?.url} alt="" className="w-9 h-9 rounded-lg object-cover flex-shrink-0 border border-white/5" />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-bold text-white truncate leading-tight">{song.title}</p>
+                        <p className="text-[10px] text-white/40 truncate mt-0.5">{song.artists?.map(a => a.name).join(', ')}</p>
+                      </div>
+                      <button onClick={() => handleRemoveFromQueue(idx)} className="text-white/30 hover:text-red-400 transition p-1.5">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-12 text-center text-white/20">
+                    <Layout className="w-6 h-6 mb-2" />
+                    <p className="text-xs font-semibold">Queue is empty</p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="flex-1 flex flex-col p-4 overflow-hidden min-h-0">
+                <Chatroom
+                  messages={chatMessages}
+                  onSendMessage={handleSendChatMessage}
+                  isJoined={isJoined && !!roomId}
+                  currentUserId={userId}
+                />
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Mobile Bottom Tab Bar ────────────────────────────────────────────── */}
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#090c15] border-t border-white/5" style={{ paddingBottom: 'var(--sab)' }}>
+        <div className="flex items-center justify-around py-2">
+          <button
+            onClick={() => { setActiveTab('Discover'); setActiveStation(null); navigateToHome(); }}
+            className={`flex flex-col items-center gap-0.5 px-3 py-1 rounded-lg transition ${
+              activeTab === 'Discover' && !roomId ? 'text-[#0081c9]' : 'text-white/30'
+            }`}
+          >
+            <Home className="w-5 h-5" />
+            <span className="text-[9px] font-bold">Discover</span>
+          </button>
+          <button
+            onClick={() => { setActiveTab('Channels'); navigateToHome(); }}
+            className={`flex flex-col items-center gap-0.5 px-3 py-1 rounded-lg transition ${
+              activeTab === 'Channels' && !roomId ? 'text-[#0081c9]' : 'text-white/30'
+            }`}
+          >
+            <Radio className="w-5 h-5" />
+            <span className="text-[9px] font-bold">Channels</span>
+          </button>
+          <button
+            onClick={() => setMobilePanel(mobilePanel === 'queue' ? 'none' : 'queue')}
+            className={`flex flex-col items-center gap-0.5 px-3 py-1 rounded-lg transition ${
+              mobilePanel === 'queue' ? 'text-[#0081c9]' : 'text-white/30'
+            }`}
+          >
+            <ListMusic className="w-5 h-5" />
+            <span className="text-[9px] font-bold">Queue</span>
+          </button>
+          {roomId && (
+            <button
+              onClick={() => setMobilePanel(mobilePanel === 'chat' ? 'none' : 'chat')}
+              className={`flex flex-col items-center gap-0.5 px-3 py-1 rounded-lg transition ${
+                mobilePanel === 'chat' ? 'text-[#0081c9]' : 'text-white/30'
+              }`}
+            >
+              <MessageSquare className="w-5 h-5" />
+              <span className="text-[9px] font-bold">Chat</span>
+            </button>
+          )}
+          <button
+            onClick={handleCreateRoom}
+            className="flex flex-col items-center gap-0.5 px-3 py-1 rounded-lg text-[#ed7700] transition"
+          >
+            <PlusCircle className="w-5 h-5" />
+            <span className="text-[9px] font-bold">Corporate</span>
+          </button>
+          <button
+            onClick={() => {
+              const code = prompt('Enter Corporate Room Code:');
+              if (code?.trim()) {
+                const clean = code.trim().toUpperCase();
+                window.history.pushState({}, '', `/room/${clean}`);
+                window.dispatchEvent(new Event('popstate'));
+              }
+            }}
+            className="flex flex-col items-center gap-0.5 px-3 py-1 rounded-lg text-white/30 transition"
+          >
+            <Users className="w-5 h-5" />
+            <span className="text-[9px] font-bold">Join</span>
+          </button>
+        </div>
+      </nav>
+
+      {/* ── Corporate Bottom Music Player Controller (Desktop) ─────────────── */}
       <Player
         currentSong={displaySong}
         onNextSong={handleNextSong}

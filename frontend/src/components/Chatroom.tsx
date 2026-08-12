@@ -49,7 +49,7 @@ export function Chatroom({
           <div className="flex-1 flex flex-col items-center justify-center text-center text-white/20 p-4">
             <MessageSquare className="w-5 h-5 mb-1.5 opacity-40" />
             <p className="text-[10px] font-semibold">No messages yet</p>
-            <p className="text-[9px] mt-0.5 max-w-[160px]">Be the first to say something in this broadcast!</p>
+            <p className="text-[9px] mt-0.5 max-w-[160px]">Be the first to say something in this corporate room!</p>
           </div>
         ) : (
           messages.map((msg, index) => {
@@ -88,7 +88,7 @@ export function Chatroom({
           value={text}
           onChange={(e) => setText(e.target.value)}
           disabled={!isJoined}
-          placeholder={isJoined ? "Send a message..." : "Connect to broadcast..."}
+          placeholder={isJoined ? "Send a message..." : "Connect to corporate room..."}
           className="flex-1 bg-white/5 border border-white/5 rounded-xl px-3 py-2 text-[11px] text-white placeholder-white/20 focus:outline-none focus:border-white/10 transition disabled:opacity-50"
         />
         <button
@@ -109,7 +109,7 @@ export function Chatroom({
           </div>
           <p className="text-[11px] font-bold text-white">Chatroom Locked</p>
           <p className="text-[9px] text-white/40 mt-1 max-w-[180px]">
-            Only members inside an active broadcast room can chat.
+            Only members inside an active corporate room can chat.
           </p>
         </div>
       )}

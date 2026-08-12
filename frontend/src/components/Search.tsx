@@ -111,7 +111,7 @@ export function Search({ onPlay, onQueue }: SearchProps) {
                           e.stopPropagation();
                           onQueue(song);
                         }}
-                        className="p-1.5 rounded-lg bg-white/5 opacity-0 group-hover:opacity-100 hover:bg-white/10 text-white/50 hover:text-[#0081c9] transition"
+                        className="p-1.5 rounded-lg bg-white/5 opacity-100 lg:opacity-0 group-hover:opacity-100 hover:bg-white/10 text-white/50 hover:text-[#0081c9] transition"
                         title="Add to queue"
                       >
                         <Plus className="w-3.5 h-3.5" />

@@ -1,6 +1,5 @@
 import time
 import random
-import string
 from typing import Dict, List, Optional, Any
 from pydantic import BaseModel
 
@@ -35,9 +34,39 @@ class RoomService:
         # Store time when a room became empty: room_id -> timestamp
         self.empty_rooms: Dict[str, float] = {}
 
+    # Funny edgy corporate room names — full phrases
+    ROOM_NAMES = [
+        # Titles / People
+        "BOSS-BITCH", "HORNY-HR", "DUMB-INTERN", "IDIOT-MANAGER",
+        "LAZY-CEO", "USELESS-VP", "CREEPY-CTO", "DRUNK-CFO",
+        "BOOTLICKER-EMPLOYEE", "FAKE-VISIONARY", "TOXIC-LEAD",
+        "MICRO-MANAGER", "GASLIGHT-GURU", "CLUELESS-FOUNDER",
+        "SLEEPING-DIRECTOR", "OVERTIME-SLAVE", "OFFICE-SNITCH",
+        "LINKEDIN-WARRIOR", "ZOOM-ZOMBIE", "PIVOT-MONKEY",
+        "CHAI-PEON", "CHAMCHA-SENIOR", "JUGAAD-BOSS",
+        "GHISSU-INTERN", "SARKARI-BABU", "NALLA-LEAD",
+        # Meetings / Events
+        "POINTLESS-MEETING", "USELESS-STANDUP", "FAKE-BRAINSTORM",
+        "MIDNIGHT-DEADLINE", "SUNDAY-CALL", "PANIC-SPRINT",
+        "GHOST-OFFSITE", "BUDGET-TAMASHA", "SALARY-FREEZE",
+        "TEAM-OUTING-CANCELLED", "APPRAISAL-NAUTANKI",
+        "PERFORMANCE-PIP", "TOXIC-TOWNHALL", "FIRE-DRILL-ALERT",
+        # Tasks / Situations
+        "LAST-MINUTE-CHANGE", "UNCLEAR-REQUIREMENTS", "SCOPE-CREEP",
+        "PRODUCTION-DOWN", "BLAME-GAME-LIVE", "FEATURE-GRAVEYARD",
+        "CRUNCH-MODE-ALWAYS", "COPY-PASTE-DEVELOPER",
+        "FAKE-DEADLINE-REAL", "UNPAID-OVERTIME", "BROKEN-PIPELINE",
+        "README-NEVER-READ", "COMMENT-YOUR-CODE", "PR-NEVER-MERGED",
+        # Hinglish Office Desi
+        "SETTING-LAGAO", "JUGAAD-DEPLOY", "KAL-KAR-LENA",
+        "BOSS-KA-CHAMCHA", "APNA-TIME-AAYEGA", "PAISE-NAHI-MILENGE",
+        "KUCH-BHI-CHALEGA", "BAKWAAS-PROJECT", "ULLU-MEETING",
+        "GHANTA-SPRINT", "BEKAAR-STANDUP", "MAST-CHILL-ZONE",
+    ]
+
     def generate_room_id(self) -> str:
         while True:
-            room_id = "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
+            room_id = random.choice(self.ROOM_NAMES)
             if room_id not in self.rooms:
                 return room_id
 
