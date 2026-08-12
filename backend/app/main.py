@@ -1,6 +1,6 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query
 from fastapi.middleware.cors import CORSMiddleware
-from app.api import search, stream, rooms
+from app.api import search, rooms
 from app.api.ws_manager import manager
 from app.services.room_service import room_service
 import json
@@ -19,7 +19,6 @@ app.add_middleware(
 )
 
 app.include_router(search.router)
-app.include_router(stream.router)
 app.include_router(rooms.router)
 
 @app.on_event("startup")

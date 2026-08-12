@@ -1,9 +1,15 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Users, Copy, Check } from 'lucide-react';
-import { API_URL } from '../services/api';
 import { RoomSocket } from '../services/socket';
 import type { SocketMessage } from '../services/socket';
 import type { Song, Room } from '../types';
+
+declare global {
+  interface Window {
+    YT: any;
+    onYouTubeIframeAPIReady: () => void;
+  }
+}
 
 interface PlayerProps {
   currentSong: Song | null;
@@ -14,6 +20,27 @@ interface PlayerProps {
   onRoomStateChange?: (room: Room) => void;
 }
 
+let ytApiLoaded = false;
+let ytApiResolvers: Array<() => void> = [];
+
+function loadYouTubeAPI(): Promise<void> {
+  return new Promise((resolve) => {
+    if (ytApiLoaded) { resolve(); return; }
+    ytApiResolvers.push(resolve);
+    if (!document.getElementById('yt-iframe-api')) {
+      const tag = document.createElement('script');
+      tag.id = 'yt-iframe-api';
+      tag.src = 'https://www.youtube.com/iframe_api';
+      document.body.appendChild(tag);
+    }
+    window.onYouTubeIframeAPIReady = () => {
+      ytApiLoaded = true;
+      ytApiResolvers.forEach(r => r());
+      ytApiResolvers = [];
+    };
+  });
+}
+
 export function Player({
   currentSong: propSong,
   roomId = null,
@@ -22,15 +49,16 @@ export function Player({
   userName = '',
   onRoomStateChange
 }: PlayerProps) {
-  const audioRef = useRef<HTMLAudioElement>(null);
-  
+  const containerRef = useRef<HTMLDivElement>(null);
+  const playerRef = useRef<any>(null);
+  const playerReadyRef = useRef(false);
+
   // Player state
   const [currentSong, setCurrentSong] = useState<Song | null>(propSong);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [streamUrl, setStreamUrl] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [volume, setVolume] = useState(1);
+  const [volume, setVolume] = useState(100);
   const [isMuted, setIsMuted] = useState(false);
 
   // Room presence UI state
@@ -42,7 +70,61 @@ export function Player({
   // Sync offsets
   const serverOffsetRef = useRef<number>(0);
   const driftCheckIntervalRef = useRef<any>(null);
+  const progressIntervalRef = useRef<any>(null);
   const lastStateVersionRef = useRef<number>(-1);
+
+  // Initialize YouTube IFrame Player once
+  useEffect(() => {
+    const containerId = 'yt-player-container';
+    loadYouTubeAPI().then(() => {
+      if (playerRef.current) return;
+      playerRef.current = new window.YT.Player(containerId, {
+        height: '0',
+        width: '0',
+        playerVars: {
+          autoplay: 0,
+          controls: 0,
+          disablekb: 1,
+          fs: 0,
+          modestbranding: 1,
+          rel: 0,
+          origin: window.location.origin,
+        },
+        events: {
+          onReady: () => {
+            playerReadyRef.current = true;
+            playerRef.current.setVolume(volume);
+          },
+          onStateChange: (event: any) => {
+            const YT = window.YT;
+            if (event.data === YT.PlayerState.ENDED) {
+              handleEnded();
+            } else if (event.data === YT.PlayerState.PLAYING) {
+              setIsPlaying(true);
+              setDuration(playerRef.current?.getDuration?.() || 0);
+            } else if (event.data === YT.PlayerState.PAUSED) {
+              setIsPlaying(false);
+            }
+          },
+        },
+      });
+    });
+    // Progress ticker
+    progressIntervalRef.current = setInterval(() => {
+      if (playerRef.current && playerReadyRef.current) {
+        try {
+          const t = playerRef.current.getCurrentTime?.();
+          const d = playerRef.current.getDuration?.();
+          if (t != null) setProgress(t);
+          if (d != null && d > 0) setDuration(d);
+        } catch (_) {}
+      }
+    }, 500);
+
+    return () => {
+      clearInterval(progressIntervalRef.current);
+    };
+  }, []);
 
   // Reset current song when prop changes (for global mode)
   useEffect(() => {
@@ -50,6 +132,20 @@ export function Player({
       setCurrentSong(propSong);
     }
   }, [propSong, roomId]);
+
+  // Load new video when currentSong changes
+  useEffect(() => {
+    if (!currentSong || !playerReadyRef.current) return;
+    try {
+      playerRef.current?.loadVideoById({
+        videoId: currentSong.videoId,
+        startSeconds: 0,
+      });
+      setProgress(0);
+    } catch (e) {
+      console.error('Failed to load video:', e);
+    }
+  }, [currentSong]);
 
   // Connect to room socket
   useEffect(() => {
@@ -74,38 +170,40 @@ export function Player({
         setRoomData(room);
         onRoomStateChange?.(room);
 
-        // Calculate server offset: serverTime - localTime
         if (msg.serverTime) {
           serverOffsetRef.current = msg.serverTime - Date.now();
         }
 
-        // Apply track updates
         if (room.currentSong) {
           setCurrentSong(room.currentSong);
         } else {
           setCurrentSong(null);
         }
 
-        // Apply playback updates
         setIsPlaying(room.playback.isPlaying);
+        if (room.playback.isPlaying && playerReadyRef.current) {
+          playerRef.current?.playVideo?.();
+        } else if (!room.playback.isPlaying && playerReadyRef.current) {
+          playerRef.current?.pauseVideo?.();
+        }
 
-        // Apply seek / position sync
         if (room.version > lastStateVersionRef.current) {
           lastStateVersionRef.current = room.version;
-          
+
           let targetPos = room.playback.position;
           if (room.playback.isPlaying && room.playback.startedAt) {
-            // startedAt is in seconds, serverTime is in ms, offset is in ms
             const currentServerTime = (Date.now() + serverOffsetRef.current) / 1000;
             const elapsed = currentServerTime - room.playback.startedAt;
             targetPos += elapsed;
           }
 
-          if (audioRef.current) {
-            const diff = Math.abs(audioRef.current.currentTime - targetPos);
-            if (diff > 0.5) { // seek directly if difference is > 500ms
-              audioRef.current.currentTime = targetPos;
-            }
+          if (playerReadyRef.current) {
+            try {
+              const current = playerRef.current?.getCurrentTime?.() || 0;
+              if (Math.abs(current - targetPos) > 0.5) {
+                playerRef.current?.seekTo?.(targetPos, true);
+              }
+            } catch (_) {}
           }
         }
       }
@@ -129,40 +227,18 @@ export function Player({
     }
   }, [propSong, roomId, isJoined, socket]);
 
+  // Play/Pause based on isPlaying state (non-room mode)
   useEffect(() => {
-    if (!currentSong) {
-      setStreamUrl(null);
-      return;
+    if (roomId) return; // rooms control playback directly via socket events
+    if (!playerReadyRef.current) return;
+    if (isPlaying) {
+      playerRef.current?.playVideo?.();
+    } else {
+      playerRef.current?.pauseVideo?.();
     }
-    
-    // Fetch direct stream URL asynchronously
-    let active = true;
-    fetch(`${API_URL}/api/stream/${currentSong.videoId}`)
-      .then(res => res.json())
-      .then(data => {
-        if (active && data.url) {
-          setStreamUrl(data.url);
-        }
-      })
-      .catch(e => console.error('Failed to resolve stream URL:', e));
+  }, [isPlaying, roomId]);
 
-    return () => {
-      active = false;
-    };
-  }, [currentSong]);
-
-  // Play/Pause effect
-  useEffect(() => {
-    if (audioRef.current) {
-      if (isPlaying && streamUrl) {
-        audioRef.current.play().catch(e => console.error('Audio play error:', e));
-      } else {
-        audioRef.current.pause();
-      }
-    }
-  }, [isPlaying, streamUrl]);
-
-  // Drift Correction Protocol (Runs every 2s)
+  // Drift Correction Protocol (Runs every 2s in room mode)
   useEffect(() => {
     if (!roomId || !isJoined || !isPlaying) {
       if (driftCheckIntervalRef.current) {
@@ -173,29 +249,17 @@ export function Player({
     }
 
     driftCheckIntervalRef.current = setInterval(() => {
-      if (!audioRef.current || !roomData || !roomData.playback.isPlaying || !roomData.playback.startedAt) return;
+      if (!playerReadyRef.current || !roomData?.playback?.isPlaying || !roomData?.playback?.startedAt) return;
 
       const currentServerTime = (Date.now() + serverOffsetRef.current) / 1000;
       const expectedPosition = roomData.playback.position + (currentServerTime - roomData.playback.startedAt);
-      const actualPosition = audioRef.current.currentTime;
-      const diff = Math.abs(expectedPosition - actualPosition);
-
-      // Drift correction thresholding:
-      // < 100ms: do nothing
-      // 100ms - 500ms: gentle correction (adjust playbackRate slightly)
-      // > 500ms: hard seek
-      if (diff >= 0.1 && diff <= 0.5) {
-        if (actualPosition < expectedPosition) {
-          audioRef.current.playbackRate = 1.05; // speed up slightly
-        } else {
-          audioRef.current.playbackRate = 0.95; // slow down slightly
+      try {
+        const actualPosition = playerRef.current?.getCurrentTime?.() || 0;
+        const diff = Math.abs(expectedPosition - actualPosition);
+        if (diff > 0.5) {
+          playerRef.current?.seekTo?.(expectedPosition, true);
         }
-      } else if (diff > 0.5) {
-        audioRef.current.playbackRate = 1.0;
-        audioRef.current.currentTime = expectedPosition;
-      } else {
-        audioRef.current.playbackRate = 1.0; // normal speed
-      }
+      } catch (_) {}
     }, 2000);
 
     return () => {
@@ -205,23 +269,13 @@ export function Player({
     };
   }, [roomId, isJoined, isPlaying, roomData]);
 
-  const handleTimeUpdate = () => {
-    if (audioRef.current) {
-      setProgress(audioRef.current.currentTime);
-      setDuration(audioRef.current.duration);
-    }
-  };
-
-  const handleEnded = () => {
+  const handleEnded = useCallback(() => {
     if (roomId && isJoined && socket) {
-      // In room mode, when track ends, tell server to advance track.
-      // To prevent multiple clients from advancing, the backend handle_next or next_track already increments playlist index.
-      // We can emit next track request, backend will check if version increases and ignores duplicate next calls
       socket.send({ type: 'ROOM_NEXT' });
     } else {
       setIsPlaying(false);
     }
-  };
+  }, [roomId, isJoined, socket]);
 
   const handlePlayPause = () => {
     if (roomId && isJoined && socket) {
@@ -238,15 +292,10 @@ export function Player({
   const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
     const time = Number(e.target.value);
     if (roomId && isJoined && socket) {
-      socket.send({
-        type: 'ROOM_SEEK',
-        position: time
-      });
+      socket.send({ type: 'ROOM_SEEK', position: time });
     } else {
-      if (audioRef.current) {
-        audioRef.current.currentTime = time;
-        setProgress(time);
-      }
+      playerRef.current?.seekTo?.(time, true);
+      setProgress(time);
     }
   };
 
@@ -265,20 +314,22 @@ export function Player({
   const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = Number(e.target.value);
     setVolume(val);
-    if (audioRef.current) {
-      audioRef.current.volume = val;
-    }
+    playerRef.current?.setVolume?.(val);
     if (val === 0) {
       setIsMuted(true);
     } else if (isMuted) {
       setIsMuted(false);
+      playerRef.current?.unMute?.();
     }
   };
 
   const toggleMute = () => {
-    if (audioRef.current) {
-      audioRef.current.muted = !isMuted;
-      setIsMuted(!isMuted);
+    if (isMuted) {
+      playerRef.current?.unMute?.();
+      setIsMuted(false);
+    } else {
+      playerRef.current?.mute?.();
+      setIsMuted(true);
     }
   };
 
@@ -301,14 +352,10 @@ export function Player({
 
   return (
     <div className="fixed bottom-0 left-0 right-0 h-24 bg-[#0a0810]/95 border-t border-[#1d1930] px-8 flex items-center justify-between z-50 shadow-[0_-10px_30px_rgba(0,0,0,0.5)]">
-      {/* Hidden Audio Element */}
-      <audio
-        ref={audioRef}
-        src={streamUrl || undefined}
-        onTimeUpdate={handleTimeUpdate}
-        onEnded={handleEnded}
-        autoPlay={true}
-      />
+      {/* Hidden YouTube IFrame Player */}
+      <div ref={containerRef} style={{ position: 'absolute', width: 0, height: 0, overflow: 'hidden' }}>
+        <div id="yt-player-container" />
+      </div>
 
       {/* Left: Song Info */}
       <div className="flex items-center gap-4 w-1/3 min-w-0">
@@ -331,8 +378,8 @@ export function Player({
           <button onClick={handlePrev} className="text-zinc-400 hover:text-white transition">
             <SkipBack className="w-5 h-5 fill-current" />
           </button>
-          
-          <button 
+
+          <button
             className="w-10 h-10 flex items-center justify-center bg-emerald-500 rounded-full text-zinc-950 hover:scale-105 active:scale-95 transition-all shadow-[0_0_15px_rgba(16,185,129,0.3)]"
             onClick={handlePlayPause}
           >
@@ -428,8 +475,8 @@ export function Player({
           <input
             type="range"
             min={0}
-            max={1}
-            step={0.01}
+            max={100}
+            step={1}
             value={isMuted ? 0 : volume}
             onChange={handleVolumeChange}
             className="w-20 h-1 bg-[#1e1a30] rounded-full appearance-none cursor-pointer accent-emerald-500 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-2.5 [&::-webkit-slider-thumb]:h-2.5 [&::-webkit-slider-thumb]:bg-emerald-400 [&::-webkit-slider-thumb]:rounded-full"
@@ -439,4 +486,3 @@ export function Player({
     </div>
   );
 }
-
