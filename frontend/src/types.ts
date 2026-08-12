@@ -1,9 +1,9 @@
 export interface Song {
   videoId: string;
   title: string;
-  artists: { name: string; id: string }[];
-  album: { name: string; id: string } | null;
-  thumbnails: { url: string; width: number; height: number }[];
+  artists: { name: string; id?: string }[];
+  album?: { name: string; id?: string } | null;
+  thumbnails: { url: string; width?: number; height?: number }[];
   duration?: string;
 }
 

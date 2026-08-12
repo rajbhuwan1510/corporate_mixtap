@@ -7,7 +7,7 @@ import type { Song, Room } from './types';
 import { api } from './services/api';
 import logoImg from './assets/logo.png';
 import {
-  Home, Compass, Users, PlusCircle, Layout, Music2,
+  Home, Compass, Users, PlusCircle, Layout,
   Trash2, Bell, MessageSquare, ChevronLeft, ListMusic
 } from 'lucide-react';
 
