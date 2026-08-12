@@ -204,7 +204,7 @@ function App() {
                   style={{ background: 'linear-gradient(135deg, #1a0f3c 0%, #0f1a2e 100%)' }}>
                   <div className="absolute -left-8 -top-8 w-48 h-48 rounded-full bg-[#18FF6D]/10 blur-3xl" />
                   {roomData.currentSong?.thumbnails?.[0]?.url
-                    ? <img src={roomData.currentSong.thumbnails[0].url} alt="Cover" className="w-40 h-40 rounded-2xl object-cover shadow-2xl z-10" />
+                    ? <img src={roomData.currentSong.thumbnails[roomData.currentSong.thumbnails.length - 1].url} alt="Cover" className="w-40 h-40 rounded-2xl object-cover shadow-2xl z-10" />
                     : <div className="w-40 h-40 rounded-2xl bg-white/5 flex items-center justify-center text-4xl z-10">🎵</div>
                   }
                   <div className="z-10">

@@ -85,7 +85,7 @@ export function Search({ onPlay, compact = false }: SearchProps) {
             >
               <div className="relative aspect-square w-full rounded-xl overflow-hidden mb-3 bg-white/10">
                 {song.thumbnails?.[0]?.url ? (
-                  <img src={song.thumbnails[0].url} alt={song.title} className="w-full h-full object-cover group-hover:scale-105 transition duration-500" />
+                  <img src={song.thumbnails[song.thumbnails.length - 1].url} alt={song.title} className="w-full h-full object-cover group-hover:scale-105 transition duration-500" />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-2xl">🎵</div>
                 )}
@@ -125,7 +125,7 @@ export function Search({ onPlay, compact = false }: SearchProps) {
               <span className="text-white/25 text-sm w-5 text-right font-medium">#{i + 1}</span>
               <div className="relative w-10 h-10 rounded-lg overflow-hidden bg-white/10 flex-shrink-0">
                 {song.thumbnails?.[0]?.url
-                  ? <img src={song.thumbnails[0].url} alt={song.title} className="w-full h-full object-cover" />
+                  ? <img src={song.thumbnails[song.thumbnails.length - 1].url} alt={song.title} className="w-full h-full object-cover" />
                   : <div className="w-full h-full flex items-center justify-center text-base">🎵</div>}
                 <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
                   <Play className="w-4 h-4 text-white fill-white ml-0.5" />

@@ -327,7 +327,7 @@ export function Player({
           <div className="flex items-center gap-3 w-72 min-w-0">
             <div className="w-12 h-12 rounded-xl overflow-hidden bg-white/10 flex-shrink-0 shadow-lg">
               {currentSong.thumbnails?.[0]?.url && (
-                <img src={currentSong.thumbnails[0].url} alt="Cover" className="w-full h-full object-cover" />
+                <img src={currentSong.thumbnails[currentSong.thumbnails.length - 1].url} alt="Cover" className="w-full h-full object-cover" />
               )}
             </div>
             <div className="min-w-0 flex-1">
